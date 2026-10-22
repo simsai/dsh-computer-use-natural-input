@@ -65,6 +65,15 @@ interface Draft {
   maxLongEdge: string
   maxMegapixels: string
   jpegQuality: string
+  naturalMouse: boolean
+  mouseSpeed: string
+  mouseJitter: string
+  naturalScroll: boolean
+  scrollNotchMs: string
+  naturalTyping: boolean
+  typingMinMs: string
+  typingMaxMs: string
+  typingErrorPct: string
 }
 
 const h = React.createElement
@@ -87,6 +96,15 @@ function draftFrom(value: unknown): Draft {
     maxLongEdge: String(s.maxLongEdge),
     maxMegapixels: String(Math.round(s.maxPixels / 10_000) / 100),
     jpegQuality: String(s.jpegQuality),
+    naturalMouse: s.naturalMouse,
+    mouseSpeed: String(s.mouseSpeed),
+    mouseJitter: String(s.mouseJitter),
+    naturalScroll: s.naturalScroll,
+    scrollNotchMs: String(s.scrollNotchMs),
+    naturalTyping: s.naturalTyping,
+    typingMinMs: String(s.typingMinMs),
+    typingMaxMs: String(s.typingMaxMs),
+    typingErrorPct: String(s.typingErrorPct),
   }
 }
 
@@ -102,6 +120,13 @@ function validate(d: Draft): Partial<Record<keyof Draft, string>> {
   check('maxLongEdge', 640, 3840)
   check('maxMegapixels', 0.3, 8)
   check('jpegQuality', 30, 100)
+  check('mouseSpeed', 200, 6000)
+  check('mouseJitter', 0, 100)
+  check('scrollNotchMs', 10, 400)
+  check('typingMinMs', 8, 300)
+  check('typingMaxMs', 20, 600)
+  check('typingErrorPct', 0, 25)
+  if (!errors.typingMinMs && !errors.typingMaxMs && Number(d.typingMaxMs) < Number(d.typingMinMs) + 12) errors.typingMaxMs = '≥ min + 12'
   return errors
 }
 
@@ -122,6 +147,15 @@ function valuesFrom(d: Draft): Record<string, unknown> {
     maxLongEdge: Math.round(Number(d.maxLongEdge)),
     maxPixels: Math.round(Number(d.maxMegapixels) * 1_000_000),
     jpegQuality: Math.round(Number(d.jpegQuality)),
+    naturalMouse: d.naturalMouse,
+    mouseSpeed: Math.round(Number(d.mouseSpeed)),
+    mouseJitter: Math.round(Number(d.mouseJitter)),
+    naturalScroll: d.naturalScroll,
+    scrollNotchMs: Math.round(Number(d.scrollNotchMs)),
+    naturalTyping: d.naturalTyping,
+    typingMinMs: Math.round(Number(d.typingMinMs)),
+    typingMaxMs: Math.round(Number(d.typingMaxMs)),
+    typingErrorPct: Math.round(Number(d.typingErrorPct)),
   }
 }
 
@@ -407,6 +441,38 @@ function ComputerUseSection({ ctx }: { ctx: ClientContext }) {
           }),
           h('span', { style: { ...S.hint, fontWeight: 400 } }, '短文字都会逐字打出来。长文本逐字输入在 Typora、Obsidian、Word 等编辑器里可能被自动补全括号、自动续列表打乱；流式按段落粘贴，既看得到过程又不会乱。'),
         ),
+      ),
+    ),
+
+    // Human-like input
+    h('section', { style: S.card },
+      h('h3', { style: S.cardTitle }, '像人一样操作'),
+      h(ToggleRow, {
+        title: '指针像手一样滑过去',
+        hint: '每次移动都沿一条略微弯曲的路径，带缓入缓出的加减速和轻微抖动，偶尔冲过头再修正。关闭则是瞬移式移动。',
+        checked: draft.naturalMouse, disabled, onChange: value => edit('naturalMouse', value),
+      }),
+      h('div', { style: S.grid2 },
+        h(NumberField, { label: '指针移动速度', unit: '像素/秒', value: draft.mouseSpeed, error: errors.mouseSpeed, disabled: disabled || !draft.naturalMouse, onChange: value => edit('mouseSpeed', value) }),
+        h(NumberField, { label: '手部抖动', unit: '%', value: draft.mouseJitter, error: errors.mouseJitter, disabled: disabled || !draft.naturalMouse, onChange: value => edit('mouseJitter', value) }),
+      ),
+      h(ToggleRow, {
+        title: '滚轮像手拨一样',
+        hint: '先快后慢、每格间隔不均匀，比等间隔的机械节奏更自然，也让带平滑滚动的页面跟得上。',
+        checked: draft.naturalScroll, disabled, onChange: value => edit('naturalScroll', value),
+      }),
+      h('div', { style: S.grid2 },
+        h(NumberField, { label: '滚轮每格间隔', unit: '毫秒', value: draft.scrollNotchMs, error: errors.scrollNotchMs, disabled: disabled || !draft.naturalScroll, onChange: value => edit('scrollNotchMs', value) }),
+      ),
+      h(ToggleRow, {
+        title: '像人一样打字',
+        hint: '每个键单独计时，字母成串、标点变慢，少量按键会打错再用退格改正，偶尔停顿。只影响逐字输入的文字（粘贴不受影响）。',
+        checked: draft.naturalTyping, disabled, onChange: value => edit('naturalTyping', value),
+      }),
+      h('div', { style: S.grid2 },
+        h(NumberField, { label: '最短按键间隔', unit: '毫秒', value: draft.typingMinMs, error: errors.typingMinMs, disabled: disabled || !draft.naturalTyping, onChange: value => edit('typingMinMs', value) }),
+        h(NumberField, { label: '最长按键间隔', unit: '毫秒', value: draft.typingMaxMs, error: errors.typingMaxMs, disabled: disabled || !draft.naturalTyping, onChange: value => edit('typingMaxMs', value) }),
+        h(NumberField, { label: '打错并改正的比例', unit: '%', value: draft.typingErrorPct, error: errors.typingErrorPct, disabled: disabled || !draft.naturalTyping, onChange: value => edit('typingErrorPct', value) }),
       ),
     ),
 

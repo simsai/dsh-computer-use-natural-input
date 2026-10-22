@@ -47,6 +47,8 @@ export class NativeHelper implements HelperLike {
     private readonly enabled: () => boolean = () => true,
     /** null: no koffi.node, every command goes to the C# helper. */
     private readonly koffiPath: string | null = findKoffi() ?? null,
+    /** Human-like input (glide, tremor, per-key timing) only exists in the C# helper. */
+    private readonly natural: () => boolean = () => false,
   ) {}
 
   get available(): boolean { return this.koffiPath !== null && !this.broken && this.enabled() }
@@ -54,6 +56,8 @@ export class NativeHelper implements HelperLike {
   /** Whether a command would run through koffi right now. */
   routesNative(cmd: string): boolean {
     if (!this.available) return false
+    // The in-process waiter has no glide or per-key pacing: leave input to the C# helper.
+    if (this.natural() && (cmd === 'move' || cmd === 'click' || cmd === 'drag' || cmd === 'scroll' || cmd === 'type')) return false
     if (ALWAYS.has(cmd)) return true
     if (NO_CARD.has(cmd)) return this.cards.size === 0
     if (NO_OVERLAY.has(cmd)) return !this.overlay && this.cards.size === 0

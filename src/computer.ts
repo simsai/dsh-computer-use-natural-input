@@ -35,6 +35,24 @@ export interface Settings {
   quickSteps: boolean
   /** Run screenshots, display / window queries and idle input in-process through DSH's koffi instead of the C# helper. */
   nativeHelper: boolean
+  /** Glide the pointer instead of teleporting: curved path, eased speed, tremor, occasional overshoot. */
+  naturalMouse: boolean
+  /** Cruise speed of the glide, in pixels per second. */
+  mouseSpeed: number
+  /** Hand tremor while gliding, in percent. */
+  mouseJitter: number
+  /** Scroll like a hand on a wheel: a quick flick that slows down, uneven rhythm. */
+  naturalScroll: boolean
+  /** Gap between wheel notches in natural scrolling, in milliseconds. */
+  scrollNotchMs: number
+  /** Type like a person: per-key delays, mistyped keys that get corrected, small pauses. */
+  naturalTyping: boolean
+  /** Shortest delay between keys, in milliseconds. */
+  typingMinMs: number
+  /** Longest delay between keys, in milliseconds. */
+  typingMaxMs: number
+  /** Share of keys mistyped and then corrected, in percent. */
+  typingErrorPct: number
 }
 
 export type TypingMode = 'stream' | 'type' | 'paste'
@@ -176,6 +194,20 @@ export class Computer {
 
   get currentIndex(): number {
     return Math.max(0, this.displayIndex)
+  }
+
+  /** Pointer profile spread into pointer helper calls: a human glide when enabled. */
+  private humanMouse(): Record<string, unknown> {
+    const s = this.settings()
+    if (!s.naturalMouse) return {}
+    return { human: true, speed: s.mouseSpeed, jitter: s.mouseJitter, overshoot: true }
+  }
+
+  /** Wheel profile spread into scroll calls: a hand-like flick when enabled. */
+  private humanScroll(): Record<string, unknown> {
+    const s = this.settings()
+    if (!s.naturalScroll) return {}
+    return { smooth: true, notchMs: s.scrollNotchMs }
   }
 
   shotSize(display: Display): Size {
@@ -587,7 +619,7 @@ export class Computer {
       case 'mouse_move': {
         const { point: p, label } = await this.aim(input, call)
         if (!p) throw new Error('mouse_move needs coordinate or target.')
-        await this.helper.call('move', { ...p })
+        await this.helper.call('move', { ...p, ...this.humanMouse() })
         return { text: `Moved the mouse${label.replace(/^ (at|on)/, ' to')}.` }
       }
       case 'left_click': case 'right_click': case 'middle_click': case 'double_click': case 'triple_click': {
@@ -597,20 +629,20 @@ export class Computer {
         const count = action === 'double_click' ? 2 : action === 'triple_click' ? 3 : 1
         // Anthropic's schema passes click modifiers in `text`.
         const modifiers = parseModifiers(input.modifiers ?? input.text)
-        await this.helper.call('click', { ...(p ?? {}), button, count, modifiers })
+        await this.helper.call('click', { ...(p ?? {}), button, count, modifiers, ...this.humanMouse() })
         return { text: `${action.replace('_', ' ')}${label}${modifiers.length ? ` holding ${input.modifiers ?? input.text}` : ''}.` }
       }
       case 'left_click_drag': {
         const from = await this.point(input.start_coordinate, 'start_coordinate')
         const to = await this.point(input.coordinate)
         await this.checkPointer(call, from, 'drag in')
-        await this.helper.call('drag', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, button: 'left' })
+        await this.helper.call('drag', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, button: 'left', ...this.humanMouse() })
         return { text: `Dragged from (${input.start_coordinate!.join(', ')}) to (${input.coordinate!.join(', ')}).` }
       }
       case 'left_mouse_down': case 'left_mouse_up': {
         const p = input.coordinate ? await this.point(input.coordinate) : undefined
         if (action === 'left_mouse_down') await this.checkPointer(call, p, 'press the mouse in')
-        await this.helper.call('button', { ...(p ?? {}), button: 'left', up: action === 'left_mouse_up' })
+        await this.helper.call('button', { ...(p ?? {}), button: 'left', up: action === 'left_mouse_up', ...this.humanMouse() })
         this.heldButton = action === 'left_mouse_down'
         return { text: `Left button ${action === 'left_mouse_down' ? 'down' : 'up'}.` }
       }
@@ -621,7 +653,7 @@ export class Computer {
         const direction = input.scroll_direction ?? 'down'
         const dy = direction === 'down' ? amount : direction === 'up' ? -amount : 0
         const dx = direction === 'right' ? amount : direction === 'left' ? -amount : 0
-        await this.helper.call('scroll', { ...(p ?? {}), dx, dy, modifiers: parseModifiers(input.modifiers) })
+        await this.helper.call('scroll', { ...(p ?? {}), dx, dy, modifiers: parseModifiers(input.modifiers), ...this.humanMouse(), ...this.humanScroll() })
         return { text: `Scrolled ${direction} ${amount}.` }
       }
       case 'type': {
@@ -632,7 +664,7 @@ export class Computer {
           // Click the field first: that is what gives it the keyboard.
           const { point: p, label } = await this.aim(input, call)
           await this.checkPointer(call, p, 'click')
-          await this.helper.call('click', { ...(p ?? {}), button: 'left', count: 1, modifiers: [] })
+          await this.helper.call('click', { ...(p ?? {}), button: 'left', count: 1, modifiers: [], ...this.humanMouse() })
           await sleep(120, undefined, { signal: call.signal })
           into = ` (clicked${label} first)`
         }
@@ -681,8 +713,12 @@ export class Computer {
       return `Typed ${text.length} characters (streamed in ${blocks.length} blocks).`
     }
     const delay = mode === 'paste' ? 0 : CHAR_DELAY_MS
-    await this.pieces(typingPieces(text), call, part => this.helper.call('type', { text: part, charDelay: delay }, 120_000).then(() => {}))
-    return `Typed ${text.length} characters.`
+    const s = this.settings()
+    const human = s.naturalTyping && mode !== 'paste'
+    await this.pieces(typingPieces(text), call, part => this.helper.call('type', human
+      ? { text: part, humanType: true, minMs: s.typingMinMs, maxMs: s.typingMaxMs, errorPct: s.typingErrorPct }
+      : { text: part, charDelay: delay }, 120_000).then(() => {}))
+    return `Typed ${text.length} characters${human ? ' (human pace)' : ''}.`
   }
 
   /** Run `step` per piece; between pieces yield to the user and make sure the target window is still in front. */

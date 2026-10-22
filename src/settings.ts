@@ -25,6 +25,15 @@ export const DEFAULTS: Settings = {
   typingMode: 'stream',
   quickSteps: false,
   nativeHelper: true,
+  naturalMouse: true,
+  mouseSpeed: 1100,
+  mouseJitter: 40,
+  naturalScroll: true,
+  scrollNotchMs: 65,
+  naturalTyping: true,
+  typingMinMs: 45,
+  typingMaxMs: 165,
+  typingErrorPct: 4,
 }
 
 /** Unwrap `.volatile()` refs (`{ get() }`) and fall back to defaults for bad values. */
@@ -37,11 +46,11 @@ export function resolveConfig(raw: unknown): Settings {
         : value
     }
   }
-  const num = (key: 'settleMs' | 'maxLongEdge' | 'maxPixels' | 'jpegQuality' | 'userIdleMs' | 'cardOpacity', min: number, max: number): number => {
+  const num = (key: 'settleMs' | 'maxLongEdge' | 'maxPixels' | 'jpegQuality' | 'userIdleMs' | 'cardOpacity' | 'mouseSpeed' | 'mouseJitter' | 'scrollNotchMs' | 'typingMinMs' | 'typingMaxMs' | 'typingErrorPct', min: number, max: number): number => {
     const value = out[key]
     return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : DEFAULTS[key]
   }
-  const bool = (key: 'overlay' | 'autoScreenshot' | 'pauseOnUserInput' | 'quickSteps' | 'nativeHelper'): boolean => typeof out[key] === 'boolean' ? out[key] : DEFAULTS[key]
+  const bool = (key: 'overlay' | 'autoScreenshot' | 'pauseOnUserInput' | 'quickSteps' | 'nativeHelper' | 'naturalMouse' | 'naturalScroll' | 'naturalTyping'): boolean => typeof out[key] === 'boolean' ? out[key] : DEFAULTS[key]
   return {
     accessMode: out.accessMode === 'allow-all' || out.accessMode === 'per-app' ? out.accessMode : DEFAULTS.accessMode,
     overlay: bool('overlay'),
@@ -59,6 +68,15 @@ export function resolveConfig(raw: unknown): Settings {
     userIdleMs: num('userIdleMs', 300, 10_000),
     quickSteps: bool('quickSteps'),
     nativeHelper: bool('nativeHelper'),
+    naturalMouse: bool('naturalMouse'),
+    mouseSpeed: num('mouseSpeed', 200, 6000),
+    mouseJitter: num('mouseJitter', 0, 100),
+    naturalScroll: bool('naturalScroll'),
+    scrollNotchMs: num('scrollNotchMs', 10, 400),
+    naturalTyping: bool('naturalTyping'),
+    typingMinMs: num('typingMinMs', 8, 300),
+    typingMaxMs: Math.max(num('typingMinMs', 8, 300) + 12, num('typingMaxMs', 20, 600)),
+    typingErrorPct: num('typingErrorPct', 0, 25),
     typingMode: out.typingMode === 'stream' || out.typingMode === 'type' || out.typingMode === 'paste' ? out.typingMode : DEFAULTS.typingMode,
     blockedApps: Array.isArray(out.blockedApps) ? out.blockedApps.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : [],
   }

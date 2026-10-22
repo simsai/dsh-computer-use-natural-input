@@ -7,6 +7,54 @@
 
 仅支持 Windows。
 
+## Fork: natural (human-like) input
+
+This fork of `@copylee/dsh-computer-use` keeps upstream behaviour as the default but adds an
+optional "human-like input" layer, because teleporting cursors and 12 ms-per-key typing are
+obvious tells in anything a person is watching (screen shares, proctored quizzes, demos).
+
+Three behaviours, all on by default and all tunable in **Settings -> Computer use -> Human-like input**:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `naturalMouse` | `true` | The pointer *glides*: a cubic Bezier path with a randomized arc, minimum-jerk acceleration/deceleration, subtle tremor that dies out as it arrives, and (22% of long moves) a small overshoot that is corrected. |
+| `mouseSpeed` | `1100` px/s | Cruise speed of that glide. Lower is more deliberate. |
+| `mouseJitter` | `40` % | Hand tremor while gliding. |
+| `naturalScroll` | `true` | The wheel is flicked, not stepped: notches start fast and slow down, with an uneven rhythm and a short settle at the end. |
+| `scrollNotchMs` | `65` ms | Base gap between notches while flicking. |
+| `naturalTyping` | `true` | Per-key typing at a human pace: letters arrive in bursts, spaces and punctuation slow the rhythm, ~4% of keys are mistyped and immediately corrected with Backspace, and after a while there is a short "hand drifted" pause. |
+| `typingMinMs` / `typingMaxMs` | `45` / `165` ms | Range for the per-key delay. |
+| `typingErrorPct` | `4` % | Share of keys mistyped and corrected. |
+
+Implementation notes:
+
+- The motion itself lives in the C# helper (`helper/CuHelper.cs`): `Input.Glide`, `Input.TypeHuman`
+  and the `smooth` branch of `Input.Scroll`. Everything else calls into it through `Approach`,
+  so `move`, `click`, `drag`, `scroll` and `type` all get the same treatment.
+- `src/native/native-helper.ts` keeps `move` / `click` / `drag` / `scroll` / `type` on the C# helper
+  whenever natural input is enabled; the in-process koffi worker has no pacing of its own, so
+  routing those to it would silently teleport and type at 12 ms/key again.
+- `src/prompt.ts` gained one bullet so a model using this plugin knows the glide is intentional and
+  does not fake pacing with extra waits or many tiny moves.
+- Pasting is untouched: `stream` and `paste` typing modes still paste long text (only short, typed
+  text is affected), so Markdown editors keep working.
+
+## Keeping up with upstream
+
+`origin` is this fork, `upstream` is `copylee711/dsh-computer-use`:
+
+```bash
+git fetch upstream
+git merge upstream/main        # or: git rebase upstream/main
+pnpm install
+pnpm build
+```
+
+The fork only touches `src/computer.ts`, `src/settings.ts`, `src/index.ts`,
+`src/native/native-helper.ts`, `src/prompt.ts`, `src/client/index.ts` and `helper/CuHelper.cs`, so
+upstream changes elsewhere apply cleanly; conflicts should only appear in those files.
+
+
 ![AI 用电脑控制打开记事本，逐行输入一首小诗](assets/demo-notepad.gif)
 
 上图是一次真实操作的录屏（只录了被操控的记事本窗口）：AI 打开记事本并逐行输入文字。下图是对话里看到的过程，以及设置页。

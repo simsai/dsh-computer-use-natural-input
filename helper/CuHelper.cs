@@ -269,14 +269,16 @@ namespace DshComputerUse
                 case "screenshot": return Screen2.Capture(r);
                 case "settle": return Screen2.Settle(r);
                 case "cursor": { Native.POINT p; Native.GetCursorPos(out p); return Pt(p.X, p.Y); }
-                case "move": using (new PassThrough()) { Overlay.Dodge(Args.Int(r, "x", 0), Args.Int(r, "y", 0)); Input.Move(Args.Int(r, "x", 0), Args.Int(r, "y", 0)); } return null;
+                case "move": using (new PassThrough()) { var mx = Args.Int(r, "x", 0); var my = Args.Int(r, "y", 0); Overlay.Dodge(mx, my); if (Args.Bool(r, "human", false)) Input.Glide(mx, my, Args.Int(r, "speed", 1100), Args.Int(r, "jitter", 40), Args.Bool(r, "overshoot", true)); else Input.Move(mx, my); } return null;
                 case "click": using (new PassThrough()) return Input.Click(r);
                 case "button": using (new PassThrough()) return Input.Button(r);
                 case "drag": using (new PassThrough()) return Input.Drag(r);
                 case "scroll": using (new PassThrough()) return Input.Scroll(r);
                 case "keys": return Input.Keys(r);
                 case "key_state": return Input.KeyState(r);
-                case "type": return Input.Type(Args.Str(r, "text", ""), Args.Int(r, "chunkDelay", 8), Args.Int(r, "charDelay", 0));
+                case "type": return Args.Bool(r, "humanType", false)
+                    ? Input.TypeHuman(Args.Str(r, "text", ""), Args.Int(r, "minMs", 55), Args.Int(r, "maxMs", 170), Args.Int(r, "errorPct", 3))
+                    : Input.Type(Args.Str(r, "text", ""), Args.Int(r, "chunkDelay", 8), Args.Int(r, "charDelay", 0));
                 case "clipboard_hold": Clip.Hold(); return null;
                 case "clipboard_release": Clip.Release(); return null;
                 case "paste": return Input.Paste(Args.Str(r, "text", ""), Args.Bool(r, "restore", true), Args.Int(r, "waitMs", 250));
@@ -583,6 +585,87 @@ namespace DshComputerUse
             Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_MOVE, 0) });
         }
 
+        static readonly Random HumanRng = new Random();
+        static double RandUnit() { lock (HumanRng) return HumanRng.NextDouble(); }
+        static double RandRange(double a, double b) { return a + (b - a) * RandUnit(); }
+        static int RandInt(int a, int b) { if (b <= a) return a; lock (HumanRng) return HumanRng.Next(a, b + 1); }
+
+        /** Minimum-jerk progress: starts and stops at rest, like a hand on a mouse. */
+        static double Smooth(double t) { return t * t * t * (10 - 15 * t + 6 * t * t); }
+
+        /**
+         * Glide the pointer to (x, y) the way a hand does: a slight arc, a
+         * minimum-jerk speed profile, a little tremor that dies out as it
+         * arrives, and now and then an overshoot that is corrected back.
+         */
+        public static void Glide(int x2, int y2, int speedPx, int jitterPct, bool overshoot)
+        {
+            Native.POINT p; Native.GetCursorPos(out p);
+            int x1 = p.X, y1 = p.Y;
+            double dx = x2 - x1, dy = y2 - y1;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+            if (dist < 3 || speedPx <= 0) { Move(x2, y2); Thread.Sleep(15); return; }
+
+            double durationMs = dist / Math.Max(200.0, Math.Min(6000.0, speedPx)) * 1000.0 * RandRange(0.85, 1.25);
+            if (durationMs < 130) durationMs = 130;
+            if (durationMs > 2200) durationMs = 2200;
+
+            bool over = overshoot && dist > 140 && RandUnit() < 0.22;
+            double ox = 0, oy = 0;
+            if (over) { double l = RandRange(6.0, 24.0); ox = dx / dist * l; oy = dy / dist * l; }
+            double tx = x2 + ox, ty = y2 + oy;
+
+            double nx = -dy / dist, ny = dx / dist;
+            double bend = dist * RandRange(-0.16, 0.16);
+            double c1x = x1 + (tx - x1) * RandRange(0.20, 0.40) + nx * bend;
+            double c1y = y1 + (ty - y1) * RandRange(0.20, 0.40) + ny * bend;
+            double c2x = x1 + (tx - x1) * RandRange(0.60, 0.82) + nx * bend * RandRange(0.5, 1.0);
+            double c2y = y1 + (ty - y1) * RandRange(0.60, 0.82) + ny * bend * RandRange(0.5, 1.0);
+
+            int steps = (int)Math.Round(durationMs / 12.0);
+            if (steps < 6) steps = 6;
+            if (steps > 180) steps = 180;
+            double tremor = Math.Min(3.0, dist * 0.01) * (Math.Max(0, Math.Min(100, jitterPct)) / 100.0);
+            double phase = RandRange(0, 6.28), phase2 = RandRange(0, 6.28);
+            int lastX = x1, lastY = y1;
+            for (int i = 1; i <= steps; i++)
+            {
+                double t = Smooth((double)i / steps);
+                double u = 1 - t;
+                double bx = u * u * u * x1 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * tx;
+                double by = u * u * u * y1 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * ty;
+                int px = (int)Math.Round(bx + tremor * u * Math.Sin(phase + t * 7.0));
+                int py = (int)Math.Round(by + tremor * u * Math.Sin(phase2 + t * 5.0));
+                if (px == lastX && py == lastY) { Thread.Sleep(1); continue; }
+                Move(px, py); lastX = px; lastY = py;
+                Thread.Sleep(Math.Max(1, (int)Math.Round(durationMs / steps * RandRange(0.75, 1.25))));
+            }
+            if (over) { Thread.Sleep(RandInt(40, 90)); GlideShort(x2, y2); }
+            else Move(x2, y2);
+            Thread.Sleep(RandInt(20, 60));
+        }
+
+        /** The short corrective hop after an overshoot. */
+        static void GlideShort(int x2, int y2)
+        {
+            Native.POINT p; Native.GetCursorPos(out p);
+            int x1 = p.X, y1 = p.Y;
+            int steps = RandInt(4, 8);
+            for (int i = 1; i <= steps; i++)
+            {
+                Move(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
+                Thread.Sleep(RandInt(8, 18));
+            }
+            Move(x2, y2);
+        }
+
+        /** How every click-like command approaches its target. */
+        static void Approach(Dictionary<string, object> r, int x, int y)
+        {
+            if (!Args.Bool(r, "human", false)) { Move(x, y); return; }
+            Glide(x, y, Args.Int(r, "speed", 1100), Args.Int(r, "jitter", 40), Args.Bool(r, "overshoot", true));
+        }
+
         static void Flags(string button, out uint down, out uint up)
         {
             switch (button)
@@ -607,7 +690,7 @@ namespace DshComputerUse
             {
                 int x = Args.Int(r, "x", 0), y = Args.Int(r, "y", 0);
                 Overlay.Dodge(x, y);
-                Move(x, y);
+                Approach(r, x, y);
                 Thread.Sleep(30);
             }
             uint down, up; Flags(Args.Str(r, "button", "left"), out down, out up);
@@ -630,7 +713,7 @@ namespace DshComputerUse
 
         public static object Button(Dictionary<string, object> r)
         {
-            if (Args.Has(r, "x")) { int x = Args.Int(r, "x", 0), y = Args.Int(r, "y", 0); Overlay.Dodge(x, y); Move(x, y); Thread.Sleep(20); }
+            if (Args.Has(r, "x")) { int x = Args.Int(r, "x", 0), y = Args.Int(r, "y", 0); Overlay.Dodge(x, y); Approach(r, x, y); Thread.Sleep(20); }
             uint down, up; Flags(Args.Str(r, "button", "left"), out down, out up);
             Send(new List<Native.INPUT> { Mouse(Args.Bool(r, "up", false) ? up : down, 0) });
             return null;
@@ -641,7 +724,7 @@ namespace DshComputerUse
             int x1 = Args.Int(r, "x1", 0), y1 = Args.Int(r, "y1", 0), x2 = Args.Int(r, "x2", 0), y2 = Args.Int(r, "y2", 0);
             uint down, up; Flags(Args.Str(r, "button", "left"), out down, out up);
             Overlay.Dodge(x1, y1); Overlay.Dodge(x2, y2);
-            Move(x1, y1); Thread.Sleep(40);
+            Approach(r, x1, y1); Thread.Sleep(40);
             Send(new List<Native.INPUT> { Mouse(down, 0) });
             try
             {
@@ -660,15 +743,42 @@ namespace DshComputerUse
 
         public static object Scroll(Dictionary<string, object> r)
         {
-            if (Args.Has(r, "x")) { int x = Args.Int(r, "x", 0), y = Args.Int(r, "y", 0); Overlay.Dodge(x, y); Move(x, y); Thread.Sleep(30); }
+            if (Args.Has(r, "x")) { int x = Args.Int(r, "x", 0), y = Args.Int(r, "y", 0); Overlay.Dodge(x, y); Approach(r, x, y); Thread.Sleep(30); }
             int dx = Args.Int(r, "dx", 0), dy = Args.Int(r, "dy", 0);
             var mods = Args.Ints(r, "modifiers");
+            bool smooth = Args.Bool(r, "smooth", false);
+            int notchMs = Math.Max(10, Math.Min(400, Args.Int(r, "notchMs", 65)));
             Modifiers(mods, false);
             try
             {
-                // One notch per event, spaced out, so smooth-scrolling apps keep up.
-                for (int i = 0; i < Math.Abs(dy); i++) { Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_WHEEL, (uint)(dy > 0 ? -120 : 120)) }); Thread.Sleep(15); }
-                for (int i = 0; i < Math.Abs(dx); i++) { Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_HWHEEL, (uint)(dx > 0 ? 120 : -120)) }); Thread.Sleep(15); }
+                if (!smooth)
+                {
+                    // One notch per event, spaced out, so smooth-scrolling apps keep up.
+                    for (int i = 0; i < Math.Abs(dy); i++) { Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_WHEEL, (uint)(dy > 0 ? -120 : 120)) }); Thread.Sleep(15); }
+                    for (int i = 0; i < Math.Abs(dx); i++) { Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_HWHEEL, (uint)(dx > 0 ? 120 : -120)) }); Thread.Sleep(15); }
+                }
+                else
+                {
+                    // A hand on the wheel: a quick flick that slows down, with a
+                    // slightly uneven rhythm instead of metronome ticks.
+                    int vy = dy > 0 ? -120 : 120;
+                    int n = Math.Abs(dy);
+                    for (int i = 0; i < n; i++)
+                    {
+                        Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_WHEEL, (uint)vy) });
+                        if (i >= n - 1) break;
+                        double progress = n <= 1 ? 1 : (double)i / (n - 1);
+                        Thread.Sleep((int)Math.Round(notchMs * (0.65 + 0.7 * progress) * RandRange(0.85, 1.2)));
+                    }
+                    int vx = dx > 0 ? 120 : -120;
+                    for (int i = 0; i < Math.Abs(dx); i++)
+                    {
+                        Send(new List<Native.INPUT> { Mouse(Native.MOUSEEVENTF_HWHEEL, (uint)vx) });
+                        if (i >= Math.Abs(dx) - 1) break;
+                        Thread.Sleep((int)Math.Round(notchMs * (0.65 + 0.7 * ((double)i / Math.Max(1, Math.Abs(dx) - 1))) * RandRange(0.85, 1.2)));
+                    }
+                    Thread.Sleep(RandInt(40, 110));
+                }
             }
             finally { Modifiers(mods, true); }
             return null;
@@ -717,6 +827,65 @@ namespace DshComputerUse
                 if (charDelay > 0 || batch.Count >= 40) flush();
             }
             flush();
+            return null;
+        }
+
+        static void Tap(int vk) { Send(new List<Native.INPUT> { Key(vk, false), Key(vk, true) }); }
+        static void TapChar(char c) { Send(new List<Native.INPUT> { Unicode(c, false), Unicode(c, true) }); }
+
+        /** One key-to-key delay: short for letters, longer for symbols, slightly biased fast. */
+        static double KeyDelay(int minMs, int maxMs, bool symbol)
+        {
+            double span = maxMs - minMs;
+            double lo = symbol ? minMs + span * 0.35 : minMs;
+            double hi = symbol ? maxMs : minMs + span * 0.45;
+            const double weight = 5.0, bias = 0.62;
+            double power = (1 - 2 * bias) * weight + 1;
+            double r = RandUnit();
+            double w = power >= 0 ? Math.Pow(r, power) : 1 - Math.Pow(1 - r, Math.Abs(power));
+            return lo + (hi - lo) * w;
+        }
+
+        /**
+         * Human typing: every key gets its own delay, letters come in quick
+         * bursts, punctuation and spaces slow it down, a small share of keys
+         * are mistyped and corrected with backspace, and after a while there
+         * is a short pause as if the hand drifted.
+         */
+        public static object TypeHuman(string text, int minMs, int maxMs, int errorPct)
+        {
+            if (minMs < 8) minMs = 8;
+            if (maxMs < minMs + 12) maxMs = minMs + 12;
+            if (errorPct < 0) errorPct = 0;
+            if (errorPct > 25) errorPct = 25;
+            char prev = '\0';
+            int same = 0, sinceRest = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\r') { if (i + 1 < text.Length && text[i + 1] == '\n') continue; c = '\n'; }
+                if (c == '\n') { Tap(0x0D); Thread.Sleep((int)KeyDelay(minMs, maxMs, false)); prev = c; same = 0; continue; }
+                if (c == '\t') { Tap(0x09); Thread.Sleep((int)KeyDelay(minMs, maxMs, false)); prev = c; same = 0; continue; }
+
+                if (errorPct > 0 && char.IsLetterOrDigit(c) && RandInt(0, 99) < errorPct)
+                {
+                    TapChar((char)('a' + RandInt(0, 25)));
+                    Thread.Sleep(RandInt(55, 140));
+                    Tap(0x08); // backspace: notice the slip and fix it
+                    Thread.Sleep(RandInt(70, 160));
+                }
+
+                TapChar(c);
+                double d = KeyDelay(minMs, maxMs, !char.IsLetterOrDigit(c));
+                if (same >= 3) d *= 0.5;
+                if (prev == ' ' && char.IsLetter(c)) d += RandInt(20, 90);
+                if (".,!?;:".IndexOf(c) >= 0) d += RandInt(220, 380);
+                Thread.Sleep((int)Math.Round(d));
+                sinceRest++;
+                if (sinceRest > 25 && RandInt(0, 99) < 8) { Thread.Sleep(RandInt(300, 900)); sinceRest = 0; }
+                same = (c == prev) ? same + 1 : 1;
+                prev = c;
+            }
             return null;
         }
 
@@ -1527,7 +1696,7 @@ namespace DshComputerUse
                     foreach (AutomationElement b in buttons)
                     {
                         string name = b.Current.Name ?? "";
-                        if (name.Contains("隐藏的图标") || name.ToLowerInvariant().Contains("hidden icons") || b.Current.ClassName == "NotifyIconOverflowButton") { pick = b; break; }
+                        if (name.ToLowerInvariant().Contains("hidden icons") || b.Current.ClassName == "NotifyIconOverflowButton") { pick = b; break; }
                     }
                     if (pick == null)
                         foreach (AutomationElement b in buttons)
@@ -2299,7 +2468,7 @@ namespace DshComputerUse
             float px = 1.333f * Scale();
             input = new InputBox(new Font("Microsoft YaHei UI", 10f * px, FontStyle.Regular, GraphicsUnit.Pixel),
                 dark ? Color.FromArgb(52, 51, 49) : Color.White, dark ? Color.FromArgb(244, 243, 241) : Color.FromArgb(31, 30, 29),
-                "告诉 DeepSeek 接下来做什么（Enter 发送，Esc 取消）");
+                "Tell DeepSeek what to do next (Enter sends, Esc cancels)");
             input.Submitted += SubmitInput;
             input.Cancelled += delegate { CloseInput(true); };
             inputBounds = Rectangle.Empty;
@@ -2408,13 +2577,13 @@ namespace DshComputerUse
         {
             if (paused)
             {
-                main = "已暂停"; sub = "按 Esc 继续";
-                actions = new[] { "resume", "stop" }; captions = new[] { "继续", "停止" };
+                main = "Paused"; sub = "Press Esc to resume";
+                actions = new[] { "resume", "stop" }; captions = new[] { "Resume", "Stop" };
                 return;
             }
             main = label;
-            sub = Typing() ? "你正在操作，已暂停" : status.Length > 0 ? status : "Esc 暂停";
-            actions = new[] { "stop" }; captions = new[] { "停止" };
+            sub = Typing() ? "You are operating, paused" : status.Length > 0 ? status : "Esc to pause";
+            actions = new[] { "stop" }; captions = new[] { "Stop" };
         }
 
         static string Key()
@@ -2504,8 +2673,8 @@ namespace DshComputerUse
             Color chip = dark ? Color.FromArgb(70, 68, 66) : Color.FromArgb(234, 232, 228);
             Color field = dark ? Color.FromArgb(52, 51, 49) : Color.White;
 
-            string title = petFinished ? "已完成" : label;
-            string state = petFinished ? "" : paused ? (input != null ? "输入指令中…" : "已暂停 · Esc 继续") : Typing() ? "你正在操作，已暂停" : "Esc 暂停";
+            string title = petFinished ? "Done" : label;
+            string state = petFinished ? "" : paused ? (input != null ? "Entering instruction…" : "Paused · Esc to resume") : Typing() ? "You are operating, paused" : "Esc to pause";
             // Header buttons, right to left.
             var actions = new List<string>(); var glyphs = new List<string>();
             if (petFinished) { actions.Add("close"); glyphs.Add("\uE711"); }
@@ -2529,7 +2698,7 @@ namespace DshComputerUse
                 using (var pg = Graphics.FromImage(probe))
                 using (var pf = new Font("Microsoft YaHei UI", 10.5f * 1.333f * scale, FontStyle.Regular, GraphicsUnit.Pixel))
                 {
-                    string t = petText.Length > 0 ? petText : "正在操作…";
+                    string t = petText.Length > 0 ? petText : "Working…";
                     float need = pg.MeasureString(t, pf, new SizeF(420 * scale - 32 * scale, 100000), new StringFormat(StringFormat.GenericTypographic)).Height + 6 * scale;
                     replyH = Math.Max(26 * scale, Math.Min(172 * scale, need));
                 }
@@ -2619,7 +2788,7 @@ namespace DshComputerUse
                 // The reply as it streams: one scrolling line, or the latest lines when expanded.
                 float lineW = bodyW - 2 * pad;
                 float ry = body.Y + headH;
-                string text = petText.Length > 0 ? petText : (petFinished ? "" : "正在操作…");
+                string text = petText.Length > 0 ? petText : (petFinished ? "" : "Working…");
                 using (var b = new SolidBrush(petText.Length > 0 ? ink : muted))
                 {
                     if (petExpanded)
@@ -2641,9 +2810,9 @@ namespace DshComputerUse
                     ly += 4 * s;
                     if (thinkingRow)
                     {
-                        float prefixW = g.MeasureString("思考：", fAct, 100000, fmt).Width;
+                        float prefixW = g.MeasureString("Thinking: ", fAct, 100000, fmt).Width;
                         string th = Tail(g, petThinking, fAct, lineW - prefixW, fmt);
-                        using (var b = new SolidBrush(muted)) { g.DrawString("思考：", fAct, b, body.X + pad, ly + 3 * s, fmt); g.DrawString(th, fAct, b, body.X + pad + prefixW, ly + 3 * s, fmt); }
+                        using (var b = new SolidBrush(muted)) { g.DrawString("Thinking: ", fAct, b, body.X + pad, ly + 3 * s, fmt); g.DrawString(th, fAct, b, body.X + pad + prefixW, ly + 3 * s, fmt); }
                         ly += 24 * s;
                     }
                     int first = Math.Max(0, petSteps.Count - stepRows);
@@ -2661,8 +2830,8 @@ namespace DshComputerUse
                 else
                 {
                     string act;
-                    if (petFinished) act = petSteps.Count > 0 ? "共 " + petSteps.Count + " 步 · " + petSteps[petSteps.Count - 1] : "";
-                    else if (petThinkingLatest && petThinking.Length > 0) act = "思考：" + Tail(g, petThinking, fAct, lineW - 14 * s - g.MeasureString("思考：", fAct, 100000, fmt).Width, fmt);
+                    if (petFinished) act = petSteps.Count > 0 ? petSteps.Count + " steps · " + petSteps[petSteps.Count - 1] : "";
+                    else if (petThinkingLatest && petThinking.Length > 0) act = "Thinking: " + Tail(g, petThinking, fAct, lineW - 14 * s - g.MeasureString("Thinking: ", fAct, 100000, fmt).Width, fmt);
                     else
                     {
                         var parts = new List<string>();

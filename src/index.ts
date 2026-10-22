@@ -16,6 +16,7 @@ import { AccessControl, normalizeApp, type AccessMode } from './access.js'
 import { Computer, type CallContext, type Settings, type TypingMode } from './computer.js'
 import { HelperClient, helperAssetPath } from './helper-client.js'
 import { NativeHelper } from './native/native-helper.js'
+import { findKoffi } from './native/koffi-path.js'
 import { OverlayController, type CancellableAgent, type HostWindowMode, type StreamFrame } from './overlay.js'
 import { promptText } from './prompt.js'
 import { SkillStore } from './skills.js'
@@ -49,6 +50,15 @@ export interface Config {
   typingMode?: TypingMode
   quickSteps?: boolean
   nativeHelper?: boolean
+  naturalMouse?: boolean
+  mouseSpeed?: number
+  mouseJitter?: number
+  naturalScroll?: boolean
+  scrollNotchMs?: number
+  naturalTyping?: boolean
+  typingMinMs?: number
+  typingMaxMs?: number
+  typingErrorPct?: number
 }
 
 
@@ -129,6 +139,42 @@ export const Config: z<Config> = z.object({
     'zh-CN': { $description: '禁止操控的应用（名称或 exe，如 “alipay”）。常见密码管理器默认已禁止。' },
     'en-US': { $description: 'Apps that may never be controlled (names or exe). Common password managers are always blocked.' },
   }),
+  naturalMouse: z.boolean().default(true).volatile().i18n({
+    'zh-CN': { $description: '像手一样移动指针：略微弯曲的路径、缓入缓出的加减速、轻微抖动，偶尔冲过头再修正' },
+    'en-US': { $description: 'Move the pointer like a hand: a slightly curved path, eased acceleration/deceleration, a little tremor, and an occasional overshoot that gets corrected' },
+  }),
+  mouseSpeed: z.natural().min(200).max(6000).default(1100).volatile().i18n({
+    'zh-CN': { $description: '指针移动速度（像素/秒，越低越从容）' },
+    'en-US': { $description: 'Pointer cruise speed in pixels per second (lower looks more deliberate)' },
+  }),
+  mouseJitter: z.natural().min(0).max(100).default(40).volatile().i18n({
+    'zh-CN': { $description: '移动时的手部抖动（%）' },
+    'en-US': { $description: 'Hand tremor while gliding the pointer (%)' },
+  }),
+  naturalScroll: z.boolean().default(true).volatile().i18n({
+    'zh-CN': { $description: '像手拨滚轮：先快后慢、节奏不均匀' },
+    'en-US': { $description: 'Scroll like a hand on a wheel: a quick flick that slows down, with an uneven rhythm' },
+  }),
+  scrollNotchMs: z.natural().min(10).max(400).default(65).volatile().i18n({
+    'zh-CN': { $description: '自然滚动时每格滚轮的间隔（毫秒）' },
+    'en-US': { $description: 'Milliseconds between wheel notches when scrolling naturally' },
+  }),
+  naturalTyping: z.boolean().default(true).volatile().i18n({
+    'zh-CN': { $description: '像人打字：每个键单独计时，字母成串、标点变慢，少量按键会打错再用退格改正，偶尔停顿' },
+    'en-US': { $description: 'Type like a person: per-key delays, quick letter bursts, slower punctuation, a few mistyped keys corrected with backspace, occasional pauses' },
+  }),
+  typingMinMs: z.natural().min(8).max(300).default(45).volatile().i18n({
+    'zh-CN': { $description: '按键之间的最短间隔（毫秒）' },
+    'en-US': { $description: 'Shortest delay between keys (ms)' },
+  }),
+  typingMaxMs: z.natural().min(20).max(600).default(165).volatile().i18n({
+    'zh-CN': { $description: '按键之间的最长间隔（毫秒）' },
+    'en-US': { $description: 'Longest delay between keys (ms)' },
+  }),
+  typingErrorPct: z.natural().min(0).max(25).default(4).volatile().i18n({
+    'zh-CN': { $description: '打错并改正的按键比例（%）' },
+    'en-US': { $description: 'Share of keys mistyped and then corrected (%)' },
+  }),
 }) as unknown as z<Config>
 
 
@@ -148,7 +194,10 @@ export function apply(ctx: Context, config: Config = {}): void {
   const settings = (): Settings => resolveConfig(config)
   const log = (message: string): void => ctx.logger.info(message)
   // Commands that koffi can take run in-process (no exe for Smart App Control to refuse); the rest go to the C# helper.
-  const helper = new NativeHelper(new HelperClient(message => ctx.logger.warn(message)), message => ctx.logger.warn(message), () => settings().nativeHelper)
+  const helper = new NativeHelper(new HelperClient(message => ctx.logger.warn(message)), message => ctx.logger.warn(message), () => settings().nativeHelper, findKoffi() ?? null, () => {
+    const s = settings()
+    return s.naturalMouse || s.naturalTyping || s.naturalScroll
+  })
   const access = new AccessControl()
   const iconPath = helperAssetPath('deepseek-white.png')
   const overlay = new OverlayController(helper, settings, log, iconPath)
