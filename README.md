@@ -1,4 +1,7 @@
-# dsh-computer-use
+# dsh-computer-use-natural-input
+
+Fork of [copylee711/dsh-computer-use](https://github.com/copylee711/dsh-computer-use) that adds **human-like input** - pointer glide, natural wheel scrolling and per-key typing - on top of upstream v0.8.0. Everything is a setting; upstream behaviour is still one toggle away.
+
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![npm](https://img.shields.io/npm/v/@copylee/dsh-computer-use)](https://www.npmjs.com/package/@copylee/dsh-computer-use)
