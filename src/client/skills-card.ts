@@ -27,7 +27,7 @@ export function SkillsCard({ S }: { S: Record<string, React.CSSProperties> }): R
         ? { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
         : { credentials: 'same-origin' })
       const result = await response.json() as SkillsBody
-      if (!result.ok) throw new Error(result.error ?? '请求失败')
+      if (!result.ok) throw new Error(result.error ?? 'Request failed')
       setSkills(result.skills ?? [])
       setDir(result.dir ?? '')
       return true
@@ -49,15 +49,15 @@ export function SkillsCard({ S }: { S: Record<string, React.CSSProperties> }): R
     if (!draft) return
     setNote(null)
     const ok = await call({ op: 'save', id: draft.isNew ? '' : draft.id, app: draft.app, match: draft.match, summary: draft.summary, content: draft.content })
-    if (ok) { setDraft(null); setNote({ kind: 'ok', text: '已保存' }) }
+    if (ok) { setDraft(null); setNote({ kind: 'ok', text: 'Saved' }) }
   }
   const remove = async (skill: Skill): Promise<void> => {
     setNote(null)
-    if (await call({ op: 'delete', id: skill.id })) { if (draft?.id === skill.id) setDraft(null); setNote({ kind: 'ok', text: `已删除“${skill.app}”` }) }
+    if (await call({ op: 'delete', id: skill.id })) { if (draft?.id === skill.id) setDraft(null); setNote({ kind: 'ok', text: `Deleted "${skill.app}"` }) }
   }
   const reset = async (skill: Skill): Promise<void> => {
     setNote(null)
-    if (await call({ op: 'reset', id: skill.id })) { if (draft?.id === skill.id) setDraft(null); setNote({ kind: 'ok', text: `已恢复“${skill.app}”的内置版本` }) }
+    if (await call({ op: 'reset', id: skill.id })) { if (draft?.id === skill.id) setDraft(null); setNote({ kind: 'ok', text: `Restored the built-in version of "${skill.app}"` }) }
   }
 
   const row: React.CSSProperties = { display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.18))' }
@@ -66,48 +66,48 @@ export function SkillsCard({ S }: { S: Record<string, React.CSSProperties> }): R
   const invalid = draft !== null && (draft.app.trim() === '' || draft.content.trim() === '' || draft.content.length > MAX_CHARS)
 
   return h('section', { style: S.card },
-    h('h3', { style: S.cardTitle }, '应用技能'),
-    h('p', { style: S.hint }, 'AI 对各个应用的操作笔记：每个应用一份，AI 摸索清楚一个不熟悉的应用后会自己记下来，以后打开这个应用时自动读取，不占用系统提示。你可以在这里查看、修改、删除或新建。'),
-    skills === null ? h('p', { style: S.hint }, busy ? '正在读取…' : '无法读取应用技能。')
-      : skills.length === 0 ? h('p', { style: S.hint }, '还没有应用技能。')
+    h('h3', { style: S.cardTitle }, 'App skills'),
+    h('p', { style: S.hint }, 'Operating notes the AI keeps for each app: one per app. After working out an unfamiliar app, the AI records it and reads it automatically the next time the app opens, without using the system prompt. You can view, edit, delete or create them here.'),
+    skills === null ? h('p', { style: S.hint }, busy ? 'Loading…' : 'Could not load app skills.')
+      : skills.length === 0 ? h('p', { style: S.hint }, 'No app skills yet.')
         : h('div', null, ...skills.map(skill => h('div', { key: skill.id, style: row },
           h('div', { style: { flex: 1, minWidth: 0 } },
             h('div', { style: { fontSize: 13, fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' } },
               skill.app,
-              h('span', { style: tag }, skill.source === 'builtin' ? '内置' : skill.overrides ? '已修改' : 'AI / 自定义'),
+              h('span', { style: tag }, skill.source === 'builtin' ? 'Built-in' : skill.overrides ? 'Modified' : 'AI / custom'),
             ),
-            h('div', { style: { ...S.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, `${skill.summary || '（无摘要）'} · ${skill.content.length} 字`),
+            h('div', { style: { ...S.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, `${skill.summary || '(no summary)'} · ${skill.content.length} chars`),
           ),
-          h('button', { type: 'button', style: small, disabled: busy, onClick: () => edit(skill) }, '查看 / 编辑'),
-          skill.overrides ? h('button', { type: 'button', style: small, disabled: busy, onClick: () => { void reset(skill) } }, '恢复内置') : null,
-          h('button', { type: 'button', style: small, disabled: busy, onClick: () => { void remove(skill) } }, '删除'),
+          h('button', { type: 'button', style: small, disabled: busy, onClick: () => edit(skill) }, 'View / edit'),
+          skill.overrides ? h('button', { type: 'button', style: small, disabled: busy, onClick: () => { void reset(skill) } }, 'Restore built-in') : null,
+          h('button', { type: 'button', style: small, disabled: busy, onClick: () => { void remove(skill) } }, 'Delete'),
         ))),
     draft === null ? null : h('div', { style: { display: 'grid', gap: 10, paddingTop: 4 } },
       h('div', { style: S.grid2 },
-        h('label', { style: S.label }, '应用名称',
-          h('input', { style: S.input, value: draft.app, disabled: !draft.isNew, maxLength: 60, placeholder: '如 Obsidian', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, app: e.target.value }) })),
-        h('label', { style: S.label }, '匹配的程序（逗号分隔）',
-          h('input', { style: S.input, value: draft.match, maxLength: 200, placeholder: '如 Obsidian, obsidian.exe', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, match: e.target.value }) })),
+        h('label', { style: S.label }, 'App name',
+          h('input', { style: S.input, value: draft.app, disabled: !draft.isNew, maxLength: 60, placeholder: 'e.g. Obsidian', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, app: e.target.value }) })),
+        h('label', { style: S.label }, 'Matching programs (comma-separated)',
+          h('input', { style: S.input, value: draft.match, maxLength: 200, placeholder: 'e.g. Obsidian, obsidian.exe', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, match: e.target.value }) })),
       ),
-      h('label', { style: S.label }, '摘要',
-        h('input', { style: S.input, value: draft.summary, maxLength: 80, placeholder: '几个词说明这份技能讲什么', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, summary: e.target.value }) })),
-      h('label', { style: S.label }, `内容（${draft.content.length} / ${MAX_CHARS} 字）`,
+      h('label', { style: S.label }, 'Summary',
+        h('input', { style: S.input, value: draft.summary, maxLength: 80, placeholder: 'A few words on what this skill covers', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, summary: e.target.value }) })),
+      h('label', { style: S.label }, `Content (${draft.content.length} / ${MAX_CHARS} chars)`,
         h('textarea', {
           style: { ...S.input, minHeight: 200, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.55 }, value: draft.content,
-          placeholder: '- 一条一条写操作规律：入口在哪、快捷键、容易踩的坑',
+          placeholder: '- One operating rule per line: where to start, shortcuts, pitfalls',
           onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft({ ...draft, content: e.target.value }),
         })),
       h('div', { style: S.actions },
-        h('button', { type: 'button', style: { ...S.primary, opacity: busy || invalid ? 0.5 : 1 }, disabled: busy || invalid, onClick: () => { void save() } }, '保存技能'),
-        h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => setDraft(null) }, '取消'),
-        draft.content.length > MAX_CHARS ? h('span', { style: S.error }, '内容过长，请精简') : null,
+        h('button', { type: 'button', style: { ...S.primary, opacity: busy || invalid ? 0.5 : 1 }, disabled: busy || invalid, onClick: () => { void save() } }, 'Save skill'),
+        h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => setDraft(null) }, 'Cancel'),
+        draft.content.length > MAX_CHARS ? h('span', { style: S.error }, 'Content is too long; shorten it') : null,
       ),
     ),
     h('div', { style: S.actions },
-      draft === null ? h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => { setNote(null); setDraft({ id: '', app: '', match: '', summary: '', content: '', isNew: true }) } }, '新建技能') : null,
-      h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => { void call() } }, '刷新'),
+      draft === null ? h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => { setNote(null); setDraft({ id: '', app: '', match: '', summary: '', content: '', isNew: true }) } }, 'New skill') : null,
+      h('button', { type: 'button', style: S.secondary, disabled: busy, onClick: () => { void call() } }, 'Refresh'),
       note === null ? null : h('span', { style: note.kind === 'ok' ? S.ok : S.error }, note.text),
     ),
-    dir ? h('p', { style: S.hint }, `保存位置：${dir}（每个应用一个 .md 文件，也可以直接用编辑器改）。删除内置技能后，新建同名技能即可重新启用。`) : null,
+    dir ? h('p', { style: S.hint }, `Saved in: ${dir} (one .md file per app; you can also edit them directly in an editor). After deleting a built-in skill, create a new one with the same name to re-enable it.`) : null,
   )
 }

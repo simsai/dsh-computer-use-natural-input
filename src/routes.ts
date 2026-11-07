@@ -60,14 +60,14 @@ export function previewRoute(helper: HelperLike, settings: () => Settings, overl
     // with the mini progress card, the card (and a sample of what scrolls through it) instead of the label bar.
     const pet = s.hostWindow === 'pet'
     await helper.call('overlay_show', {
-      label: pet ? `${s.overlayLabel} 正在操控` : `${s.overlayLabel} 正在操控你的电脑`,
-      status: pet ? '预览' : '预览 · 4 秒后消失',
+      label: pet ? `${s.overlayLabel} is controlling` : `${s.overlayLabel} is controlling your computer`,
+      status: pet ? 'Preview' : 'Preview · disappears in 4 seconds',
       icon: iconPath, iconLight: iconPath.replace(/deepseek-white\.png$/, 'deepseek-black.png'),
       idleMs: s.userIdleMs, glow: s.overlay, pet, petOpacity: s.cardOpacity, text: '',
     })
     if (pet) {
       await helper.call('pet_update', {
-        text: '这是预览：操控电脑时，这里滚动显示 AI 的回复正文。', thinking: '第二行显示思考过程和最近几步操作', steps: ['打开应用', '输入文字', '预览 · 4 秒后消失'], thinkingLatest: false,
+        text: 'This is a preview: while the AI controls the computer, its reply text scrolls here.', thinking: 'The second line shows thinking and the latest steps', steps: ['Open app', 'Type text', 'Preview · disappears in 4 seconds'], thinkingLatest: false,
       }).catch(() => {})
     }
     setTimeout(() => { if (overlay.controller === undefined) void helper.call('overlay_hide').catch(() => {}) }, 4000).unref()

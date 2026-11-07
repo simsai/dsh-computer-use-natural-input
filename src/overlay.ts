@@ -35,9 +35,9 @@ export function plainLine(text: string): string {
 
 /** Friendly names of common tools on the card's activity line. */
 const TOOL_NAMES: Record<string, string> = {
-  computer: '操作电脑', computer_batch: '批量操作', open_application: '打开应用', windows: '窗口', ui_elements: '读取界面元素',
-  clipboard: '剪贴板', request_access: '请求授权', pwsh: '运行命令', bash: '运行命令', shell: '运行命令',
-  read: '读取文件', write: '写入文件', edit: '编辑文件', web_search: '搜索网页', web_fetch: '读取网页', todo_write: '更新待办',
+  computer: 'Computer action', computer_batch: 'Batch actions', open_application: 'Open app', windows: 'Windows', ui_elements: 'Read UI elements',
+  clipboard: 'Clipboard', request_access: 'Request access', pwsh: 'Run command', bash: 'Run command', shell: 'Run command',
+  read: 'Read file', write: 'Write file', edit: 'Edit file', web_search: 'Web search', web_fetch: 'Read web page', todo_write: 'Update todos',
 }
 
 /** Reply text kept for the card (the expanded card shows its last lines). */
@@ -140,7 +140,7 @@ export class OverlayController {
       else if (event.event === 'message' && event.reason) {
         const agent = this.agent
         if (!agent) return
-        this.step(`你：${event.reason}`)
+        this.step(`You: ${event.reason}`)
         this.onMessage?.(agent, event.reason)
       }
     })
@@ -209,7 +209,7 @@ export class OverlayController {
       this.steps = status ? [status] : []
       this.thinkingLatest = false
       await this.helper.call('overlay_show', {
-        label: pet ? `${settings.overlayLabel || 'DeepSeek Harness'} 正在操控` : `${settings.overlayLabel || 'DeepSeek Harness'} 正在操控你的电脑`,
+        label: pet ? `${settings.overlayLabel || 'DeepSeek Harness'} is controlling` : `${settings.overlayLabel || 'DeepSeek Harness'} is controlling your computer`,
         status,
         icon: this.iconPath,
         iconLight: this.iconPath.replace(/deepseek-white\.png$/, 'deepseek-black.png'),
@@ -267,7 +267,7 @@ export class OverlayController {
         return
       }
     }
-    this.step(`${TOOL_NAMES[name] ?? name}${detail ? `：${detail}` : ''}`)
+    this.step(`${TOOL_NAMES[name] ?? name}${detail ? `: ${detail}` : ''}`)
   }
 
   private schedulePush(): void {

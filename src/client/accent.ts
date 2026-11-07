@@ -14,10 +14,10 @@ import * as React from 'react'
 export type Accent = 'orange' | 'blue' | 'black'
 
 export const ACCENTS: Record<Accent, { name: string; accent: string; ink: string }> = {
-  orange: { name: '陶土橙', accent: '#D97757', ink: '#FFFFFF' },
-  blue: { name: '蓝色', accent: '#3D63E6', ink: '#FFFFFF' },
+  orange: { name: 'Terracotta orange', accent: '#D97757', ink: '#FFFFFF' },
+  blue: { name: 'Blue', accent: '#3D63E6', ink: '#FFFFFF' },
   // Black is the Host's own text colour, so it turns light on a dark theme and the ink turns dark.
-  black: { name: '黑色', accent: 'var(--dsw-alias-label-primary, #1F1E1D)', ink: 'var(--dsw-alias-bg-base, #FFFFFF)' },
+  black: { name: 'Black', accent: 'var(--dsw-alias-label-primary, #1F1E1D)', ink: 'var(--dsw-alias-bg-base, #FFFFFF)' },
 }
 export const ACCENT_IDS = Object.keys(ACCENTS) as Accent[]
 export const DEFAULT_ACCENT: Accent = 'orange'
@@ -88,7 +88,7 @@ export function useAccent(): [Accent, (accent: Accent) => void] {
 }
 
 /** A row of round swatches: one of them is always chosen. */
-export function AccentPicker({ label = '强调色', hint = '', names }: {
+export function AccentPicker({ label = 'Accent colour', hint = '', names }: {
   label?: string
   hint?: string
   /** Colour names in the page's language; the built-in ones are Chinese. */

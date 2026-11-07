@@ -452,23 +452,23 @@ export class Computer {
   static statusOf(input: ActionInput): string {
     const at = input.target ? ` “${input.target.slice(0, 20)}”` : input.coordinate ? ` (${input.coordinate.join(', ')})` : ''
     switch (input.action) {
-      case 'screenshot': return '查看屏幕'
-      case 'zoom': return '放大查看'
-      case 'left_click': return `点击${at}`
-      case 'double_click': return `双击${at}`
-      case 'triple_click': return `三击${at}`
-      case 'right_click': return `右键${at}`
-      case 'middle_click': return `中键${at}`
-      case 'mouse_move': return `移动鼠标${at}`
-      case 'left_click_drag': return `拖动到${at}`
-      case 'left_mouse_down': return '按下鼠标'
-      case 'left_mouse_up': return '松开鼠标'
-      case 'scroll': return `滚动 ${input.scroll_direction ?? 'down'}${at}`
-      case 'type': return `输入 “${(input.text ?? '').slice(0, 16)}${(input.text ?? '').length > 16 ? '…' : ''}”`
-      case 'key': return `按键 ${input.text ?? ''}`
-      case 'hold_key': return `按住 ${input.text ?? ''}`
-      case 'wait': return input.until ? `等待 ${input.until.slice(0, 24)}${input.gone ? ' 消失' : ''}` : '等待'
-      case 'cursor_position': return '读取光标位置'
+      case 'screenshot': return 'View screen'
+      case 'zoom': return 'Zoom in'
+      case 'left_click': return `Click${at}`
+      case 'double_click': return `Double-click${at}`
+      case 'triple_click': return `Triple-click${at}`
+      case 'right_click': return `Right-click${at}`
+      case 'middle_click': return `Middle-click${at}`
+      case 'mouse_move': return `Move mouse${at}`
+      case 'left_click_drag': return `Drag to${at}`
+      case 'left_mouse_down': return 'Press mouse'
+      case 'left_mouse_up': return 'Release mouse'
+      case 'scroll': return `Scroll ${input.scroll_direction ?? 'down'}${at}`
+      case 'type': return `Type “${(input.text ?? '').slice(0, 16)}${(input.text ?? '').length > 16 ? '…' : ''}”`
+      case 'key': return `Key ${input.text ?? ''}`
+      case 'hold_key': return `Hold ${input.text ?? ''}`
+      case 'wait': return input.until ? `Wait for ${input.until.slice(0, 24)}${input.gone ? ' to disappear' : ''}` : 'Wait'
+      case 'cursor_position': return 'Read cursor position'
     }
   }
 
@@ -656,7 +656,7 @@ export class Computer {
       const changed = await this.foregroundChanged()
       // Clicking into the DeepSeek Harness card is the user reading the chat, not a new task.
       if (changed && !isHostWindow(changed) && !isTransientShell(changed)) {
-        await this.overlay.status('检测到窗口切换，重新查看屏幕')
+        await this.overlay.status('Window changed; re-checking the screen')
         const image = call.vision ? await this.screenshot() : undefined
         if (!image) this.seen = changed
         return {
@@ -788,7 +788,7 @@ export class Computer {
       await this.helper.call('clipboard_hold')
       try {
         await this.pieces(blocks, call, async (block, i) => {
-          await this.overlay.status(`输入中 ${i + 1}/${blocks.length}`)
+          await this.overlay.status(`Typing ${i + 1}/${blocks.length}`)
           await this.helper.call('paste', { text: block, restore: false, waitMs: 220 })
         })
       } finally {

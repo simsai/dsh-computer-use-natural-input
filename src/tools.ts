@@ -99,7 +99,7 @@ const actionProperties = {
   scroll_direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
   scroll_amount: { type: 'integer', description: 'Wheel notches (default 3).' },
   duration: { type: 'number', description: 'Seconds for wait / hold_key (with until: the timeout, default 10).' },
-  target: { type: 'string', description: 'Instead of coordinate: the visible name of a control in the foreground window or its open menu, e.g. "保存" or "按钮:保存". Works for controls that were not in your last screenshot (the item of a menu the previous step opens); waits up to 3 s for it. With type: clicks the field first.' },
+  target: { type: 'string', description: 'Instead of coordinate: the visible name of a control in the foreground window or its open menu, e.g. "Save" or "button:Save". Works for controls that were not in your last screenshot (the item of a menu the previous step opens); waits up to 3 s for it. With type: clicks the field first.' },
   until: { type: 'string', description: 'wait: return as soon as this is there, "window:<title or exe part>" or "target:<control name>", instead of waiting a fixed time.' },
   gone: { type: 'boolean', description: 'wait until: wait for it to disappear instead.' },
   region: { type: 'array', items: { type: 'number' }, description: 'zoom: [x1, y1, x2, y2] in screenshot pixels.' },
@@ -135,12 +135,12 @@ export function createTools(host: ToolHost): ToolDefinition[] {
         throw error
       }
     },
-    presentCall: args => card(`电脑操作 · ${Computer.statusOf(args as ActionInput)}`),
+    presentCall: args => card(`Computer action · ${Computer.statusOf(args as ActionInput)}`),
   }))
 
   tools.push(defineTool({
     name: 'computer_batch',
-    description: 'Run several computer actions in order in one call, then get one screenshot (taken once the screen settles, so do not end with a wait). Stops at the first failing action and shows you the screen. The screen is not shown to you between actions, so for steps whose target only appears along the way (a menu item, a dialog button) use target instead of coordinate, and wait with until for a window or control to appear. Example: [key "ctrl+s", wait until "window:另存为", type target "文件名" text "C:\\a.txt", left_click target "保存"].',
+    description: 'Run several computer actions in order in one call, then get one screenshot (taken once the screen settles, so do not end with a wait). Stops at the first failing action and shows you the screen. The screen is not shown to you between actions, so for steps whose target only appears along the way (a menu item, a dialog button) use target instead of coordinate, and wait with until for a window or control to appear. Example: [key "ctrl+s", wait until "window:Save As", type target "File name" text "C:\\a.txt", left_click target "Save"].',
     parameters: {
       actions: {
         type: 'array', required: true, description: 'Ordered actions, same fields as the computer tool. zoom is allowed only as the last action (you get the zoomed region instead of the full screenshot).',
@@ -201,12 +201,12 @@ export function createTools(host: ToolHost): ToolDefinition[] {
         : undefined
       return withShot(host, shot === undefined ? `${summary}\n${await computer.describeForeground()}` : summary, shot, call)
     },
-    presentCall: args => card(`电脑操作 · 批量 ${(args as { actions?: unknown[] }).actions?.length ?? 0} 步`),
+    presentCall: args => card(`Computer action · batch of ${(args as { actions?: unknown[] }).actions?.length ?? 0} steps`),
   }))
 
   tools.push(defineTool({
     name: 'open_application',
-    description: 'Open an app by name (e.g. "Chrome", "记事本", "微信", "Excel"), an .exe path, or a URL, or bring it to the front if it is already running. Faster and more reliable than clicking the taskbar or Start menu. Returns a screenshot.',
+    description: 'Open an app by name (e.g. "Chrome", "Notepad", "WeChat", "Excel"), an .exe path, or a URL, or bring it to the front if it is already running. Faster and more reliable than clicking the taskbar or Start menu. Returns a screenshot.',
     parameters: {
       name: { type: 'string', required: true, description: 'App name as shown in the Start menu, an executable path, or an http(s) URL.' },
       new_instance: { type: 'boolean', description: 'Start another copy even though the app is already running. Only when the user explicitly asks for a second window / instance / account.' },
@@ -220,7 +220,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const shot = call.vision ? await computer.screenshot() : undefined
       return withShot(host, text, shot, call)
     },
-    presentCall: args => card(`打开应用 · ${(args as { name?: string }).name ?? ''}`),
+    presentCall: args => card(`Open app · ${(args as { name?: string }).name ?? ''}`),
   }))
 
   /** Open an app or bring it forward; returns what happened, the foreground window and the app's skill notes. */
@@ -231,7 +231,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const settings = computer.settings()
       const isUrl = /^https?:\/\//i.test(name)
       // ms-settings:display and friends open the Settings app.
-      const appName = /^ms-settings:/i.test(name) ? '设置' : name
+      const appName = /^ms-settings:/i.test(name) ? 'Settings' : name
       if (settings.accessMode === 'per-app' && !isUrl && computer.access.missing(call.session, [appName]).length > 0) {
         const running = (await computer.windows()).find(win => appMatches(appName, win))
           ?? (await computer.backgroundApps(false)).find(win => appMatches(appName, win))
@@ -244,7 +244,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
           computer.access.grant(call.session, [appName])
         }
       }
-      await computer.overlay.begin(call.agent, `打开 ${name}`)
+      await computer.overlay.begin(call.agent, `Open ${name}`)
       await computer.overlay.yieldToUser(call.signal, false)
       const before = await computer.foreground()
       let how: string
@@ -317,7 +317,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
 
   /** Put back what the task changed: re-minimize restored windows, report the ones it opened. */
   async function tidy(call: CallContext): Promise<Value> {
-    await computer.overlay.begin(call.agent, '整理窗口')
+    await computer.overlay.begin(call.agent, 'Tidy windows')
     const rows = (await computer.windows()).filter(win => !isHostWindow(win))
     const minimized: string[] = []
     for (const win of rows) {
@@ -368,7 +368,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const denial = computer.access.denial(call.session, target, settings.accessMode, settings.blockedApps, action)
       // Minimizing is harmless and reversible: allowed for any window, so you can clear what is in the way.
       if (denial && action !== 'minimize') throw new Error(denial)
-      await computer.overlay.begin(call.agent, `窗口 ${action}`)
+      await computer.overlay.begin(call.agent, `Window ${action}`)
       await computer.overlay.yieldToUser(call.signal, false)
       if (action === 'close') {
         if (computer.overlay.isRememberedWebWindow(target)) throw new Error('This window contains the protected DeepSeek Harness Web tab.')
@@ -385,7 +385,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const shot = await computer.after([{ action: 'key' }], call)
       return withShot(host, shot ? text : `${text} ${await computer.describeForeground()}`, shot, call)
     },
-    presentCall: args => card((args as { action?: string }).action === 'tidy' ? '整理窗口' : `窗口 · ${(args as { action?: string }).action ?? ''}`),
+    presentCall: args => card((args as { action?: string }).action === 'tidy' ? 'Tidy windows' : `Window · ${(args as { action?: string }).action ?? ''}`),
   }))
 
   tools.push(defineTool({
@@ -416,7 +416,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const head = `${result.exe} — "${String(result.title ?? '').slice(0, 80)}": ${result.elements.length} elements.`
       return { text: lines.length ? `${head}\n${lines.join('\n')}` : `${head} This window exposes no UI Automation elements; rely on screenshots.` }
     },
-    presentCall: () => card('读取界面元素'),
+    presentCall: () => card('Read UI elements'),
   }))
 
   tools.push(defineTool({
@@ -437,7 +437,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const result = await computer.helper.call<{ text: string }>('clipboard_get')
       return { text: result.text === '' ? 'Clipboard has no text.' : `Clipboard text:\n${result.text.slice(0, 20_000)}` }
     },
-    presentCall: args => card(`剪贴板 · ${(args as { action?: string }).action === 'write' ? '写入' : '读取'}`),
+    presentCall: args => card(`Clipboard · ${(args as { action?: string }).action === 'write' ? 'Write' : 'Read'}`),
   }))
 
   tools.push(defineTool({
@@ -457,12 +457,12 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const shot = call.vision ? await computer.screenshot() : undefined
       return withShot(host, `Switched to display ${index}.\n${list}`, shot, call)
     },
-    presentCall: () => card('切换显示器'),
+    presentCall: () => card('Switch display'),
   }))
 
   tools.push(defineTool({
     name: 'request_access',
-    description: 'Ask the user to let you control specific apps in this session (they approve in DeepSeek Harness). Call it before acting on an app, listing every app the task needs, e.g. ["Chrome", "记事本"]. Input to apps that are not granted is refused.',
+    description: 'Ask the user to let you control specific apps in this session (they approve in DeepSeek Harness). Call it before acting on an app, listing every app the task needs, e.g. ["Chrome", "Notepad"]. Input to apps that are not granted is refused.',
     parameters: {
       apps: { type: 'array', items: { type: 'string' }, required: true, description: 'App names (Start-menu names or .exe names).' },
       reason: { type: 'string', description: 'One sentence on why, shown to the user.' },
@@ -479,7 +479,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       computer.access.grant(call.session, apps)
       return { text: `Granted for this session: ${computer.access.granted(call.session).join(', ')}. Open or focus them with open_application.` }
     },
-    presentCall: args => card(`请求操控 · ${((args as { apps?: string[] }).apps ?? []).join('、')}`),
+    presentCall: args => card(`Request access · ${((args as { apps?: string[] }).apps ?? []).join(', ')}`),
   }))
 
   if (host.skills) {
@@ -517,7 +517,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
         const saved = action === 'write' ? skills.save({ app: name, content: text, ...extra }, skills.find(name)?.id) : skills.append(name, text, extra)
         return { text: `Skill for ${saved.app} saved (${saved.content.length} of ${SKILL_MAX_CHARS} characters).` }
       },
-      presentCall: args => card(`应用技能 · ${({ list: '列表', read: '读取', append: '记录', write: '重写' } as Record<string, string>)[(args as { action?: string }).action ?? ''] ?? ''}${(args as { app?: string }).app ? ` · ${(args as { app?: string }).app}` : ''}`),
+      presentCall: args => card(`App skill · ${({ list: 'List', read: 'Read', append: 'Append', write: 'Rewrite' } as Record<string, string>)[(args as { action?: string }).action ?? ''] ?? ''}${(args as { app?: string }).app ? ` · ${(args as { app?: string }).app}` : ''}`),
     }))
   }
 
@@ -533,7 +533,7 @@ export function createTools(host: ToolHost): ToolDefinition[] {
       const granted = computer.access.granted(call.session)
       return { text: granted.length ? `Granted: ${granted.join(', ')}` : 'Nothing granted yet; call request_access.' }
     },
-    presentCall: () => card('已授权应用'),
+    presentCall: () => card('Granted apps'),
   }))
 
   return tools
