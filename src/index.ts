@@ -276,6 +276,76 @@ export function apply(ctx: Context, config: Config = {}): void {
   for (const tool of tools) ctx.effect(() => ctx.tools.register(tool), `computer-use: tool ${tool.name}`)
   const OWN_TOOLS = new Set(tools.map(tool => tool.name))
 
+  // LOCAL ONLY: computer control needs a fresh approval every user turn.
+  // (Kept out of the fork: this is a personal policy, not an upstream feature.)
+  const APPROVAL_FREE = new Set(['request_access', 'list_granted_applications', 'app_skill'])
+  const GRANT_RE = /(you (?:can|may|are allowed to|have permission to) (?:use|control|take|drive)|use (?:the )?computer|computer (?:control|use)[^.]{0,24}(?:allowed|approved|ok|fine|go ahead)|go ahead and (?:use|control|take)|i approve|permission granted|you have my permission)/i
+  const approved = new WeakSet<object>()
+
+  const textOf = (content: unknown): string => {
+    if (typeof content === 'string') return content
+    if (Array.isArray(content)) {
+      return content.map(part => typeof part === 'string' ? part : String((part as { text?: unknown })?.text ?? '')).join(' ')
+    }
+    return ''
+  }
+  /** Text of the last user message in the session's model history (it may grant control). */
+  const lastUserText = (session: unknown): string | undefined => {
+    try {
+      const msgs = (session as { deriveMessages?: () => Array<{ role?: string; content?: unknown }> })?.deriveMessages?.() ?? []
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i]?.role === 'user') return textOf(msgs[i]!.content)
+      }
+    } catch { /* fall through: unknown history means no approval */ }
+    return undefined
+  }
+
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    if (!OWN_TOOLS.has(exec.name) || APPROVAL_FREE.has(exec.name)) return next()
+    const agent = exec.agent as AgentLike | undefined
+    const session = agent?.session as unknown as object | undefined
+    if (!session) return next()
+    if (approved.has(session)) return next()
+    // An explicit go-ahead in a user message unlocks the current turn.
+    const text = lastUserText(session)
+    if (text !== undefined && GRANT_RE.test(text)) {
+      approved.add(session)
+      return next()
+    }
+    const approval = (ctx as unknown as { get(name: string): unknown }).get('approval') as { effectivePolicy?(session: unknown): string } | undefined
+    if (agent && approval?.effectivePolicy?.(agent.session) !== 'never') {
+      // Prompting is available: ask once, the successful call marks the turn approved below.
+      return {
+        kind: 'ask',
+        reason: 'Control the computer for this turn (mouse, keyboard, screen)',
+        displayReason: {
+          en: 'Let DeepSeek control this computer for this turn?',
+          'zh-CN': '允许 DeepSeek 本轮操控这台电脑？',
+        },
+      }
+    }
+    return {
+      kind: 'deny',
+      reason: 'Computer control is locked: it needs the user\'s explicit approval for this turn. Do not retry. Tell the user you need their go-ahead (for example "you can use computer control") and wait for their next message; that message will unlock this turn.',
+    }
+  })
+
+  // A computer call that actually ran means the user approved this turn.
+  ctx.on('tools/execute', async (exec, next) => {
+    const result = await next()
+    if (OWN_TOOLS.has(exec.name) && !APPROVAL_FREE.has(exec.name)) {
+      const session = exec.agent?.session as unknown as object | undefined
+      if (session) approved.add(session)
+    }
+    return result
+  })
+
+  // Only a turn that really ends needs a fresh go-ahead; an automated interruption
+  // inside a running turn (e.g. the repeat-call notice) keeps the approval.
+  ctx.on('agent/turn-stopping', (payload: { agent: { session: unknown } }) => {
+    approved.delete(payload.agent.session as object)
+  })
+
   // request_access goes through DSH's own approval prompt.
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.name !== 'request_access' || settings().accessMode !== 'per-app') return next()

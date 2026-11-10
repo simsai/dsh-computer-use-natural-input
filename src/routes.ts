@@ -63,11 +63,11 @@ export function previewRoute(helper: HelperLike, settings: () => Settings, overl
       label: pet ? `${s.overlayLabel} is controlling` : `${s.overlayLabel} is controlling your computer`,
       status: pet ? 'Preview' : 'Preview · disappears in 4 seconds',
       icon: iconPath, iconLight: iconPath.replace(/deepseek-white\.png$/, 'deepseek-black.png'),
-      idleMs: s.userIdleMs, glow: s.overlay, pet, petOpacity: s.cardOpacity, text: '',
+      idleMs: s.userIdleMs, glow: s.overlay, pet, petOpacity: s.cardOpacity,
     })
     if (pet) {
       await helper.call('pet_update', {
-        text: 'This is a preview: while the AI controls the computer, its reply text scrolls here.', thinking: 'The second line shows thinking and the latest steps', steps: ['Open app', 'Type text', 'Preview · disappears in 4 seconds'], thinkingLatest: false,
+        thinking: 'Check the form first, then verify the result.', steps: ['Open app', 'Type text', 'Preview · disappears in 4 seconds'],
       }).catch(() => {})
     }
     setTimeout(() => { if (overlay.controller === undefined) void helper.call('overlay_hide').catch(() => {}) }, 4000).unref()
